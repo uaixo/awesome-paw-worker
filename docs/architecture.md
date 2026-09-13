@@ -60,7 +60,7 @@ stdio: [ignore, pipe, pipe, ipc]
 
 Port `0` lets the OS pick, so the shell cannot know the URL in advance. DSH's human-readable `dsh web: <url>` line is silenced in the patch; instead the `pawwork-web-ready` plugin, mounted inside the sidecar, sends the authenticated root URL back over the IPC channel the spawn already opened (`resources/dsh/product/lib/web-ready.js`). That file records why: the log line is addressed to a person, it grew a `(LAN: …)` suffix, it shares a prefix with the browser-handoff line beside it, and parsing it would route the launch token through the persistent application log.
 
-The token in that URL is the whole handshake. Loading the root with it mints the session cookie every later request rides on, so an origin without it answers 401.
+The token in that URL is the bootstrap, not a per-request credential. Loading the root with it mints an authority-bound signed cookie that every later request rides on — index and `/api` alike — and that cookie outlives the token, so a window already holding one keeps working across a restart that mints a new one. A root request with neither answers 401.
 
 The shell drives the rest through a state machine in `src/main/dsh-lifecycle.ts`:
 
@@ -144,14 +144,16 @@ Each is a DSH plugin with an `inject` list and an `apply(ctx)`. Several ship a m
 | `pawwork-web-ready` | Announces the URL over IPC | — |
 | `pawwork-product` | OpenCode catalog refresh; the Desktop profile and pnpm services; community-market HTTP routes | Window chrome, sidebar toggle, brand marks, file-picker action, community-market settings tab |
 | `pawwork-identity` | One system-prompt section | — |
-| `pawwork-automations` | Store, scheduler, executor, six agent tools, loopback RPC | Automation list, editor, date popout |
+| `pawwork-automations` | Store, scheduler, executor, six agent tools, a management RPC channel | Automation list, editor, date popout |
 | `pawwork-web-search` | One search provider with two selectable engines | Settings card for the engine and its keys |
 | `pawwork-updater` | A deliberate no-op: the state machine lives in the Electron main process | Settings section, ready toast, sidebar indicator |
 | `pawwork-import-v1` | One-time migration from PawWork v1 | Dismissible import notice |
 
 ### The identity section
 
-The product name reaches the model as a system-prompt section rather than a config toggle (`resources/dsh/identity/index.js`). The harness opener says only that it is powered by DeepSeek Harness, and each shipped preset mounts its own persona row that shadows a deployment persona — so a *new* section name in the global layer is the one thing every preset inherits, because shadowing is per name. Its order places it after the harness identity and before the persona, and the harness opener stays: PawWork is built on DSH, and the attribution should say so.
+The product name reaches the model as a system-prompt section rather than a config toggle (`resources/dsh/identity/index.js`). The harness opener says only that it is powered by DeepSeek Harness, and each shipped preset mounts its own persona row that shadows a deployment persona — so a *new* section name in the global layer is what a preset does not shadow, because shadowing is per name. Its order places it after the harness identity and before the persona, and the harness opener stays: PawWork is built on DSH, and the attribution should say so.
+
+One preset is outside that reach. The pinned release ships `standard`, `minimal`, `ptc` and `cordis`, and `minimal` mounts its persona with `complete: true`, which its own composition documents as "the persona is the complete system prompt, so global identity, Web orientation, tool guidance, and later assembly listeners cannot add prompt text". A session on `minimal` therefore does not carry the product name. The plugin's comment says otherwise, and names a `code` preset the pinned release does not ship.
 
 ### The v1 importer
 
@@ -196,7 +198,7 @@ Automations are PawWork's own feature, in `resources/dsh/automations/`, built fr
 - **Store** — one JSON document at `<DSH_HOME>/automations.json`, written atomically (temp file, then rename, mode 0600) with an in-memory rollback to the last durable copy if the write throws.
 - **Scheduler** — a single timer armed at the earliest next fire time, capped at the maximum timer delay and unreferenced so it cannot hold the process open. Due definitions are *claimed*: the claim advances the next fire time and appends the run record in the same save, so a claim that could not be persisted is retried later rather than on the next tick.
 - **Executor** — creates or resumes a DSH agent, renames a fresh session, sends the saved prompt as a follow-up, waits for idle, and reads the assistant text out of the new turn.
-- **Surfaces** — six agent tools (`automation_create`, `_list`, `_update`, `_set_paused`, `_run_now`, `_delete`) and a loopback-authority RPC endpoint for the UI.
+- **Surfaces** — six agent tools (`automation_create`, `_list`, `_update`, `_set_paused`, `_run_now`, `_delete`) and one RPC channel, `/pawwork-automations`, for the UI.
 
 ### The rules that make it durable
 
@@ -224,7 +226,7 @@ The product frame is a full-privilege surface: anything running in it, plugins i
 - **Navigation** — one decision function (`src/main/window-navigation.ts`) classifies every target as same-origin, external http(s), or denied. Popups are always denied and the destination re-homed by the same rule, so a privileged scheme reaches neither the window nor the browser.
 - **IPC** — every privileged handler re-checks that the sender is the main frame and same-origin with the live DSH URL, and refuses while DSH is not ready.
 - **Community market** — enabling or disabling it raises a native confirmation dialog before acting, so the decision to hand third-party code PawWork's permissions is made outside the page. The HTTP routes behind it additionally require a per-launch host token.
-- **Automations RPC** — registered with loopback authority.
+- **Automations RPC** — an ordinary DSH Connection channel, carrying the protection every DSH RPC channel carries: the Host/Origin trust fence and the browser-session cookie. It is reachable only from this machine because the sidecar binds loopback, not because the registration restricts callers. The registration passes a third argument asking for a loopback authority, and at the pinned DSH version `rpc.handle` takes two parameters, so that argument has no effect. The plugin is plain JavaScript, so nothing type-checks it.
 - **Supply chain** — `uv` is pinned by version and by sha256 in `packages/desktop-electron/bundled-tools.json`, checked into the repository rather than fetched from the release it is meant to verify, so moving to a new upstream build always requires a reviewed manifest diff.
 - **Proxy** — loopback is added to `NO_PROXY` and to Chromium's bypass list, so a corporate proxy cannot sit between the app and its own sidecar.
 
