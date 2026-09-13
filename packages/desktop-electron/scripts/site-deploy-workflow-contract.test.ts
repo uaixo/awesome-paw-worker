@@ -32,8 +32,11 @@ describe("site deploy workflow", () => {
     expect(install).toBeGreaterThanOrEqual(0)
     expect(deploy).toBeGreaterThan(install)
     expect(packageJson.devDependencies?.wrangler).toMatch(/^\d+\.\d+\.\d+$/)
+    // Both halves are load-bearing: the branch keeps a build-check run from publishing,
+    // and the repository keeps a fork — which may carry this history on another default
+    // branch — from ever reaching this project's Cloudflare Pages project.
     expect(steps[deploy]).toMatchObject({
-      if: "github.ref == 'refs/heads/main'",
+      if: "github.ref == 'refs/heads/main' && github.repository == 'Astro-Han/pawwork'",
       env: {
         CLOUDFLARE_API_TOKEN: "${{ secrets.CLOUDFLARE_API_TOKEN }}",
         CLOUDFLARE_ACCOUNT_ID: "${{ secrets.CLOUDFLARE_ACCOUNT_ID }}",

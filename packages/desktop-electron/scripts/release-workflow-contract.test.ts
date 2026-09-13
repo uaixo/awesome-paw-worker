@@ -39,7 +39,7 @@ function runSourceValidation(phase: string, githubRef: string, sourceRef = "") {
     encoding: "utf8",
     env: {
       ...process.env,
-      EXPECTED_SOURCE_REF: "main",
+      EXPECTED_SOURCE_REFS: "main master",
       GITHUB_REF: githubRef,
       PHASE: phase,
       SOURCE_REF: sourceRef,
@@ -48,14 +48,23 @@ function runSourceValidation(phase: string, githubRef: string, sourceRef = "") {
 }
 
 describe("release workflow", () => {
-  test("accepts main branch submit and finalize sources", () => {
-    expect(runSourceValidation("submit", "refs/heads/main").status).toBe(0)
-    expect(runSourceValidation("finalize", "refs/tags/workflow-snapshot-1", "main").status).toBe(0)
+  // The release branch is a set rather than one name, because a fork may carry this
+  // history on a differently named default branch. Every name in it still has to be a
+  // branch: the submit phase reads GITHUB_REF, and a tag that happens to end in one of
+  // these names must not qualify.
+  test("accepts release branch submit and finalize sources", () => {
+    for (const branch of ["main", "master"]) {
+      expect(runSourceValidation("submit", `refs/heads/${branch}`).status).toBe(0)
+      expect(runSourceValidation("finalize", "refs/tags/workflow-snapshot-1", branch).status).toBe(0)
+    }
   })
 
-  test("rejects release sources outside main", () => {
+  test("rejects release sources outside the release branches", () => {
     expect(runSourceValidation("submit", "refs/heads/dev").status).toBe(1)
+    expect(runSourceValidation("submit", "refs/tags/main").status).toBe(1)
+    expect(runSourceValidation("submit", "").status).toBe(1)
     expect(runSourceValidation("finalize", "refs/tags/workflow-snapshot-1", "dev").status).toBe(1)
+    expect(runSourceValidation("finalize", "refs/tags/workflow-snapshot-1", "").status).toBe(1)
   })
 
   test("requires the workflow to name the mirror branch explicitly", () => {

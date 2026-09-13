@@ -8,7 +8,7 @@ name: pr-title-lint
 on:
   pull_request_target:
     types: [opened, edited, reopened, ready_for_review]
-    branches: [main]
+    branches: [main, master]
 
 concurrency:
   group: pr-title-lint-${{ github.event.pull_request.number }}
