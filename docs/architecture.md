@@ -171,7 +171,7 @@ The packaged model list is a floor, not the answer. `resources/dsh/product/lib/o
 
 ### Speaking the gateway's dialect
 
-`resources/dsh/zen-identity.mjs` is loaded with `node --import` ahead of DSH and wraps global `fetch`. For zen-gateway requests only, it sets the official client's user-agent headers and restates the harness session id — which the adapter already writes under its own header name — under the name the gateway requires. It is a preload because the adapter overwrites the user-agent with harness attribution and the stream layer cannot change outbound headers.
+`resources/dsh/zen-identity.mjs` is loaded with `node --import` ahead of DSH and wraps global `fetch`. For zen-gateway requests only, it sets the official client's user-agent headers and restates the harness session id — which the adapter already writes under its own header name — under the name the gateway requires. It is a preload because neither header can be set from configuration. A route profile does carry a `headers` field, but the harness attribution wins the reserved names, so `User-Agent` cannot be overridden there; and the session header's value changes per request, so no static field can carry it.
 
 The free-tier credential is supplied through the launch environment rather than the credential store, which makes it read-only in the UI: the Models page renders the field disabled, and a write is refused rather than silently shadowed.
 
