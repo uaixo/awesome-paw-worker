@@ -187,7 +187,13 @@ export function apply(ctx) {
   const rpc = createAutomationRpcHandler({ store, scheduler });
   ctx.provide('pawworkAutomations', { store, scheduler });
   ctx.effect(() => {
-    const stopRpc = ctx.connection.rpc.handle('/pawwork-automations', rpc, { authority: 'loopback' });
+    // Connection gives every channel it registers the same protection, applied
+    // before this handler runs: the Host/Origin fence answers 403, then the
+    // browser-session cookie answers 401. There is no per-channel authority to
+    // ask for. What keeps this channel off the network is the sidecar binding
+    // 127.0.0.1; what keeps it off another origin's page is that cookie, which
+    // only a GET of the launch URL mints.
+    const stopRpc = ctx.connection.rpc.handle('/pawwork-automations', rpc);
     const stopCreated = ctx.on('agent/created', ({ agent }) => {
       if (!ctx.agents.roots().includes(agent)) return;
       registerAgentTools(ctx, agent, store, scheduler, checkModel);

@@ -662,9 +662,13 @@ function rpcSuccess(value) {
   return { ok: true, value };
 }
 
-// `code` must come from DSH's enum: it validates the whole response, so an invented
-// code fails validation entirely and the user sees that instead of the message.
-// Our own reasons go in `details.issues`.
+// `code` is a free string. The RPC envelope schema requires only that it BE a string
+// (with `message` a string and `details` an object); nothing checks the value, and DSH's
+// own codes are namespaced `gateway/*`, so these are not drawn from a vocabulary DSH
+// defines. They stay deliberate because this file's tests pin `bad-request` and
+// `conflict`, and because they record which kind of failure occurred. Nothing the UI has
+// to act on may ride on them — the client shows `message` and branches on
+// `details.issues` — so a reason the editor must localize goes there.
 function rpcFailure(code, message, details = {}) {
   return { ok: false, error: { code, message, details } };
 }

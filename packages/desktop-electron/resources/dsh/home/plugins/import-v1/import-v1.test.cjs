@@ -297,8 +297,8 @@ test('reports done only once every stage has run and the result is recorded', as
     apply({
       connection: {
         rpc: {
-          handle: (channel, handler, options) => {
-            registration = { channel, options };
+          handle: (channel, handler) => {
+            registration = { channel };
             status = handler;
             return async () => {};
           },
@@ -321,10 +321,7 @@ test('reports done only once every stage has run and the result is recorded', as
       workspaceRegistry: {},
     });
 
-    assert.deepEqual(registration, {
-      channel: '/pawwork-import-v1',
-      options: { authority: 'loopback' },
-    });
+    assert.deepEqual(registration, { channel: '/pawwork-import-v1' });
     assert.deepEqual(await status('status', {}), { ok: true, value: { phase: 'running' } });
 
     releaseSessions();
