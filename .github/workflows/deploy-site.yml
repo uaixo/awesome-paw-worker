@@ -2,7 +2,7 @@ name: deploy-site
 
 on:
   push:
-    branches: [main]
+    branches: [main, master]
     paths:
       - ".github/workflows/deploy-site.yml"
       - "package.json"
@@ -45,11 +45,13 @@ jobs:
 
       - run: pnpm --filter @pawwork/site build
 
-      # Deploy only when on main (push to main or manual dispatch from main). PRs and
-      # manual runs from other branches stop after the build-check steps above, so
-      # the fixed --branch=main below can never publish non-main content.
+      # Deploy only from main in this repository (push to main or manual dispatch from
+      # main). PRs, other branches, and forks stop after the build-check steps above, so
+      # the fixed --branch=main below can never publish non-main content — and a fork
+      # whose default branch is named differently build-checks the site without ever
+      # reaching this project's Cloudflare Pages project.
       - name: Deploy site
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' && github.repository == 'Astro-Han/pawwork'
         run: pnpm exec wrangler pages deploy site/dist --project-name=pawwork --branch=main
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

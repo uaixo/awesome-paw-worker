@@ -86,17 +86,26 @@ jobs:
         run: |
           set -euo pipefail
 
+          # A fork may carry this history on a differently named default branch, so the
+          # release branch is a set. Tags and topic branches still fail: only a ref that
+          # strips to one of these names is accepted.
           if [ "$PHASE" = "finalize" ]; then
-            if [ "$SOURCE_REF" != "$EXPECTED_SOURCE_REF" ]; then
-              echo "Finalize source must be $EXPECTED_SOURCE_REF, got ${SOURCE_REF:-<empty>}"
-              exit 1
-            fi
-          elif [ "$GITHUB_REF" != "refs/heads/$EXPECTED_SOURCE_REF" ]; then
-            echo "Releases must start from $EXPECTED_SOURCE_REF, got $GITHUB_REF"
-            exit 1
+            ref="${SOURCE_REF:-}"
+            subject="Finalize source"
+          else
+            ref="${GITHUB_REF#refs/heads/}"
+            subject="Releases"
           fi
+
+          case " $EXPECTED_SOURCE_REFS " in
+            *" $ref "*) ;;
+            *)
+              echo "$subject must be one of: $EXPECTED_SOURCE_REFS; got ${ref:-<empty>}"
+              exit 1
+              ;;
+          esac
         env:
-          EXPECTED_SOURCE_REF: main
+          EXPECTED_SOURCE_REFS: main master
           PHASE: ${{ inputs.phase || 'submit' }}
           SOURCE_REF: ${{ inputs.source_ref }}
 

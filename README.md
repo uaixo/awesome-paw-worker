@@ -103,6 +103,8 @@ PawWork is a DSH runtime, a native desktop shell, and a product layer on top.
 - **Product layer** — [`packages/desktop-electron/resources/dsh`](packages/desktop-electron/resources/dsh): the DSH plugins PawWork owns, including the OpenCode Free model routes, built-in web search, Automations, v1 settings migration, and the desktop host bridge.
 - **Skills** — [`skills/`](skills): vendored Office skills for `.docx`, `.xlsx`, `.pptx`, and PDF, executed through a bundled [`uv`](https://github.com/astral-sh/uv) Python toolchain so they work without a system Python.
 
+How those pieces fit together — the process model, the composition patch, packaging and release — is in [docs/architecture.md](docs/architecture.md).
+
 ## Build From Source
 
 Requires Node.js 24 and pnpm 11.

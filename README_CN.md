@@ -103,6 +103,8 @@ Automations 按 cron 计划自动执行已保存的任务——周一早上汇�
 - **产品层** —— [`packages/desktop-electron/resources/dsh`](packages/desktop-electron/resources/dsh)：爪印自己维护的 DSH 插件，包括 OpenCode Free 模型路由、内置联网搜索、Automations、v1 设置迁移和桌面宿主桥接。
 - **Skills** —— [`skills/`](skills)：随包的 Office skills，覆盖 `.docx`、`.xlsx`、`.pptx` 和 PDF，通过随包的 [`uv`](https://github.com/astral-sh/uv) Python 工具链执行，不依赖系统 Python。
 
+这几部分如何拼接起来——进程模型、组合补丁、打包与发布——见 [docs/architecture.md](docs/architecture.md)（英文）。
+
 ## 从源码构建
 
 需要 Node.js 24 和 pnpm 11。
