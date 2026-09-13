@@ -336,7 +336,6 @@ export function apply(ctx) {
           },
         };
       },
-      { authority: 'loopback' },
     );
     return async () => {
       await stopStatusRpc();

@@ -1,14 +1,17 @@
 export const name = 'pawwork-identity';
 
 // The deployment-wide PawWork identity. dsh-system-prompt's fixed opener only
-// says "powered by DeepSeek Harness", and each shipped preset mounts its own
-// persona row that shadows the deployment persona — so neither the identity
-// toggle nor the persona config can carry the product name into a preset
-// agent. A NEW section name in the global layer can: scope shadowing is
-// per-name, so standard/code/minimal all inherit this section. Order -99 sits
-// in the identity band, right after the harness identity (-100) and before
-// the persona (0). The harness opener stays: PawWork IS built on DSH, and the
-// attribution should say so.
+// says "powered by DeepSeek Harness", its identity toggle is a boolean that
+// carries no text of its own, and its persona config registers
+// `deployment:persona-prefix` — the name each shipped preset's own persona row
+// registers too, and section shadowing is per name, so the deployment's copy is
+// dropped. A NEW section name has nothing to shadow it, which is why `standard`,
+// `ptc` and `cordis` inherit this one. `minimal` is the exception: its persona
+// sets `complete: true`, and assembly restores a complete section as the SOLE
+// prompt section, so a session on that preset carries neither this section nor
+// the harness opener. Order -99 sits in the identity band, after the harness
+// identity (-1000) and before the persona (0). The harness opener stays:
+// PawWork IS built on DSH, and the attribution should say so.
 export const PAWWORK_IDENTITY_SECTION = Object.freeze({
 	name: 'pawwork:identity',
 	order: -99,

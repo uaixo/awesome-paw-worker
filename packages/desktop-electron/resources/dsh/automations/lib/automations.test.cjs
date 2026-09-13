@@ -61,7 +61,7 @@ function fakeClock(initial) {
   };
 }
 
-test('registers and disposes the loopback management RPC with the scheduler lifecycle', async () => {
+test('registers and disposes the management RPC with the scheduler lifecycle', async () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'pawwork-automations-plugin-'));
   const pluginUrl = `${pathToFileURL(path.join(__dirname, 'index.js')).href}?lifecycle=${Date.now()}`;
   const { apply } = await import(pluginUrl);
@@ -76,8 +76,8 @@ test('registers and disposes the loopback management RPC with the scheduler life
       agents: { roots: () => [] },
       connection: {
         rpc: {
-          handle: (channel, _handler, options) => {
-            registration = { channel, options };
+          handle: (channel) => {
+            registration = { channel };
             return async () => { rpcStopped = true; };
           },
         },
@@ -88,10 +88,7 @@ test('registers and disposes the loopback management RPC with the scheduler life
       provide: () => {},
     });
 
-    assert.deepEqual(registration, {
-      channel: '/pawwork-automations',
-      options: { authority: 'loopback' },
-    });
+    assert.deepEqual(registration, { channel: '/pawwork-automations' });
     await dispose();
     assert.equal(rpcStopped, true);
     assert.equal(listenerStopped, true);
