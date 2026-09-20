@@ -51,8 +51,15 @@ export type CiSmokeProductSnapshot = {
   automationSettingsEntryVisible: boolean
   updateSettingsEntryVisible: boolean
   webSearchCardVisible: boolean
+  webSearchConfiguredBeforeSave: boolean
+  webSearchUnsavedShown: boolean
+  webSearchSaveWorks: boolean
+  webSearchFailureText: string
   updateSectionVisible: boolean
   updateSectionReportsStatus: boolean
+  integrationsEntryVisible: boolean
+  mcpOAuthSurfaceVisible: boolean
+  mcpOAuthAddFormVisible: boolean
   automationSidebarEntryAbsent: boolean
   automationSurfaceVisible: boolean
   automationCreateViaChatWorked: boolean
@@ -73,6 +80,7 @@ export type CiSmokeProductSnapshot = {
   cursorProbeCaught: string[]
   titlebarStripHeight: number
   titlebarStripDraggable: boolean
+  titlebarStripPrecedesControls: boolean
   contentInsetHeight: number
   titlebarInsetLeft: number
   titlebarInsetRight: number
@@ -237,12 +245,17 @@ export function staleMainEntry(mainEntry = resolveMainEntry(), sourceRoot = reso
   return newer === undefined ? undefined : join(sourceRoot, newer)
 }
 
+// The credential store resolves a reference over the process environment, so an
+// inherited key leaves the reference configured before the card's form writes
+// one, and the probe below would pass with nothing written.
+const SMOKE_CREDENTIAL_REFS = ["EXA_API_KEY", "DEEPSEEK_API_KEY"]
+
 export function buildSmokeEnv(
   homeDir: string,
   env: NodeJS.ProcessEnv = process.env,
   options: BuildSmokeEnvOptions = {},
 ) {
-  return {
+  const smokeEnv: NodeJS.ProcessEnv = {
     ...env,
     CI: "true",
     HOME: homeDir,
@@ -255,6 +268,8 @@ export function buildSmokeEnv(
     ...(options.cdpPort !== undefined ? { PAWWORK_CI_SMOKE_CDP_PORT: String(options.cdpPort) } : {}),
     ...(options.v1Database !== undefined ? { PAWWORK_V1_DATABASE: options.v1Database } : {}),
   }
+  for (const ref of SMOKE_CREDENTIAL_REFS) delete smokeEnv[ref]
+  return smokeEnv
 }
 
 export function parseSmokeCdpPort(raw: string | undefined) {
@@ -507,6 +522,17 @@ export async function inspectCiSmokeProduct(target: CdpTarget, workspacePath: st
     const titlebarStripHeight = titlebarStrip ? titlebarStrip.getBoundingClientRect().height : -1
     const titlebarStripDraggable = Boolean(titlebarStrip)
       && getComputedStyle(titlebarStrip).getPropertyValue("-webkit-app-region").trim() === "drag"
+    // Draggable regions are composited in document order and the last rect containing a point
+    // decides, so a control the strip covers keeps its clicks only when its own no-drag rect
+    // comes after the strip. The strip is mounted ahead of the app root to make that hold.
+    const titlebarStripPrecedesControls = Boolean(titlebarStrip)
+      && Array.from(document.querySelectorAll('button, a, input, textarea, select, [role="button"], [role="tab"], [contenteditable="true"]'))
+        .filter(visible)
+        .filter((element) => {
+          const rect = element.getBoundingClientRect()
+          return rect.top < titlebarStripHeight && rect.bottom > 0
+        })
+        .every((element) => Boolean(titlebarStrip.compareDocumentPosition(element) & Node.DOCUMENT_POSITION_FOLLOWING))
     const insetProbe = document.createElement("div")
     insetProbe.style.cssText = 'box-sizing:border-box;height:0;padding-left:var(--pawwork-titlebar-inset-left,0px);padding-right:var(--pawwork-titlebar-inset-right,0px);position:fixed;visibility:hidden;width:100vw'
     document.body.appendChild(insetProbe)
@@ -594,6 +620,18 @@ export async function inspectCiSmokeProduct(target: CdpTarget, workspacePath: st
     // status card must carry live text from the bridge, not an empty shell.
     const updateStatusText = (document.querySelector(".pawwork-update-status")?.textContent || "").trim()
     const updateSectionReportsStatus = updateStatusText.length > 0
+    // The Integrations section is the only UI path to remote MCP servers: the
+    // nav entry, the rendered surface, and the add form are checked separately
+    // because each half of the plugin (host registration and client bundle)
+    // fails on its own.
+    const integrationsEntry = visibleButton(/^(集成|Integrations)$/i)
+    const integrationsEntryVisible = visible(integrationsEntry)
+    integrationsEntry?.click()
+    for (let attempt = 0; attempt < 20 && !visible(document.querySelector(".pawwork-mcp-surface")); attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    }
+    const mcpOAuthSurfaceVisible = visible(document.querySelector(".pawwork-mcp-surface"))
+    const mcpOAuthAddFormVisible = visible(document.querySelector(".pawwork-mcp-add"))
     // A Host settings namespace renders nothing on its own: the card that draws
     // it is a client plugin, and the two halves fail independently. The Host
     // half surviving alone leaves a namespace no user can reach — which reads,
@@ -606,6 +644,30 @@ export async function inspectCiSmokeProduct(target: CdpTarget, workspacePath: st
       await new Promise((resolve) => setTimeout(resolve, 50))
     }
     const webSearchCardVisible = visible(document.querySelector(".pawwork-websearch-card"))
+    // A write that stops inside the renderer is invisible to every Host-side
+    // assertion, so this drives the real form and reads back what it says.
+    document.querySelector(".pawwork-websearch-header")?.click()
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    const webSearchConfiguredBeforeSave = visible(document.querySelector(".pawwork-websearch-badge"))
+    const webSearchKeyInput = document.querySelector("#pawwork-websearch-key")
+    if (webSearchKeyInput) {
+      const keyValueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+      keyValueSetter?.call(webSearchKeyInput, "smoke-web-search-key")
+      webSearchKeyInput.dispatchEvent(new Event("input", { bubbles: true }))
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    const webSearchUnsavedShown = visible(document.querySelector(".pawwork-websearch-pending"))
+    document.querySelector(".pawwork-websearch-save")?.click()
+    let webSearchSaveWorks = false
+    for (let attempt = 0; attempt < 40 && !webSearchSaveWorks; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      // The configured state is this class; the keyless badge is a different
+      // one, and the copy behind either is the card's own to word.
+      webSearchSaveWorks = !visible(document.querySelector(".pawwork-websearch-pending"))
+        && !visible(document.querySelector(".pawwork-websearch-failed"))
+        && visible(document.querySelector(".pawwork-websearch-badge"))
+    }
+    const webSearchFailureText = (document.querySelector(".pawwork-websearch-failed")?.textContent || "").trim()
     // The automation flow below expects its own surface; navigate back first.
     visibleButton(/^(自动化|Automations)$/i)?.click()
     for (let attempt = 0; attempt < 20 && !visible(document.querySelector(".pawwork-automations-surface")); attempt += 1) {
@@ -890,8 +952,15 @@ export async function inspectCiSmokeProduct(target: CdpTarget, workspacePath: st
       automationSettingsEntryVisible,
       updateSettingsEntryVisible,
       webSearchCardVisible,
+      webSearchConfiguredBeforeSave,
+      webSearchUnsavedShown,
+      webSearchSaveWorks,
+      webSearchFailureText,
       updateSectionVisible,
       updateSectionReportsStatus,
+      integrationsEntryVisible,
+      mcpOAuthSurfaceVisible,
+      mcpOAuthAddFormVisible,
       automationSidebarEntryAbsent,
       automationSurfaceVisible,
       automationCreateViaChatWorked,
@@ -912,6 +981,7 @@ export async function inspectCiSmokeProduct(target: CdpTarget, workspacePath: st
       cursorProbeCaught,
       titlebarStripHeight,
       titlebarStripDraggable,
+      titlebarStripPrecedesControls,
       contentInsetHeight,
       titlebarInsetLeft,
       titlebarInsetRight,
@@ -1205,6 +1275,9 @@ export function assertCiSmokeProduct(snapshot: CiSmokeProductSnapshot, platform:
       ? null
       : `frameless=${frameless} but the titlebar drag strip is ${snapshot.titlebarStripHeight}px`,
     snapshot.titlebarStripDraggable ? null : "titlebar strip is not a drag region",
+    snapshot.titlebarStripPrecedesControls
+      ? null
+      : "a control inside the titlebar band precedes the drag strip, so the strip wins the overlap and drops its clicks",
     snapshot.contentInsetHeight === 0 ? null : `web content still has a ${snapshot.contentInsetHeight}px full-width titlebar inset`,
     titlebarInsetsMatchPlatform
       ? null
@@ -1264,7 +1337,19 @@ export function assertCiSmokeProduct(snapshot: CiSmokeProductSnapshot, platform:
     snapshot.updateSettingsEntryVisible ? null : "Software Update settings entry is not visible",
     snapshot.updateSectionVisible ? null : "Software Update section did not open",
     snapshot.updateSectionReportsStatus ? null : "Software Update section shows no status from the updater bridge",
+    snapshot.integrationsEntryVisible ? null : "Integrations settings entry is not visible",
+    snapshot.mcpOAuthSurfaceVisible ? null : "Integrations section did not open",
+    snapshot.mcpOAuthAddFormVisible ? null : "Integrations add-server form is not rendered",
     snapshot.webSearchCardVisible ? null : "PawWork web search settings card is not in the Plugins section",
+    snapshot.webSearchConfiguredBeforeSave
+      ? "PawWork web search card already reported a configured key before the form wrote one"
+      : null,
+    snapshot.webSearchUnsavedShown ? null : "PawWork web search card did not stage a typed API key",
+    snapshot.webSearchSaveWorks
+      ? null
+      : `PawWork web search card did not save a key through its own form${
+        snapshot.webSearchFailureText.length > 0 ? `: ${snapshot.webSearchFailureText}` : ""
+      }`,
     snapshot.automationSidebarEntryAbsent ? null : "Automation should not occupy the sidebar",
     snapshot.automationSurfaceVisible ? null : "Automation surface did not open",
     snapshot.automationCreateViaChatWorked ? null : "Automation did not create through the visible chat path",
